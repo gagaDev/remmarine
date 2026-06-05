@@ -23,6 +23,8 @@ DEFAULT_EXCEL_PATH = Path(r"D:\MARINE REPORTS\REM CASES\Remittances10.xlsx")
 DEFAULT_SHEET = "Sheet1"
 LARGE_WORKBOOK_BYTES = 250 * 1024 * 1024
 MAX_STYLED_CELLS = 250_000
+EXCEL_EXTENSIONS = (".xlsx", ".xlsm", ".xls")
+COLAB_WORKBOOK_ROOTS = (Path("/content"), Path("/content/drive/MyDrive"))
 
 # Some exported sheets do not contain a header row. When that happens, the
 # first row is data, so we restore the expected remittance schema manually.
@@ -159,6 +161,29 @@ NO_CUSDEC_CONDITION = f"""
     or coalesce(lower(trim(cast(CMP_CON_COD as varchar))), '') in {MISSING_TEXT_SQL}
 )
 """
+
+
+def running_in_colab() -> bool:
+    try:
+        import google.colab  # type: ignore  # noqa: F401
+    except ImportError:
+        return False
+    return True
+
+
+def discover_colab_workbooks() -> list[Path]:
+    if not running_in_colab():
+        return []
+
+    workbooks: list[Path] = []
+    for root in COLAB_WORKBOOK_ROOTS:
+        if not root.exists():
+            continue
+        for path in root.glob("*"):
+            if path.is_file() and path.suffix.casefold() in EXCEL_EXTENSIONS:
+                workbooks.append(path)
+
+    return sorted(set(workbooks), key=lambda path: path.name.casefold())
 
 DECLARANT_NODE_SQL = """
 concat(
@@ -2887,14 +2912,40 @@ def main() -> None:
 
     with st.sidebar:
         st.header("Data source")
-        uploaded = st.file_uploader("Upload Excel workbook", type=["xlsx", "xlsm"])
+        uploaded = st.file_uploader("Upload Excel workbook", type=["xlsx", "xlsm", "xls"])
+        source_path: Path | None = None
         if uploaded:
             with NamedTemporaryFile(delete=False, suffix=Path(uploaded.name).suffix) as tmp:
                 tmp.write(uploaded.getbuffer())
                 source_path = Path(tmp.name)
         else:
-            source_path = DEFAULT_EXCEL_PATH
-        st.caption(str(source_path))
+            colab_workbooks = discover_colab_workbooks()
+            if colab_workbooks:
+                selected_workbook = st.selectbox(
+                    "Colab uploaded workbook",
+                    colab_workbooks,
+                    format_func=lambda path: str(path),
+                )
+                source_path = selected_workbook
+
+            default_path_text = str(DEFAULT_EXCEL_PATH) if DEFAULT_EXCEL_PATH.exists() else ""
+            workbook_path = st.text_input(
+                "Workbook path",
+                value=str(source_path) if source_path else default_path_text,
+                placeholder="/content/remittances.xlsx or /content/drive/MyDrive/remittances.xlsx",
+            )
+            if workbook_path:
+                source_path = Path(workbook_path).expanduser()
+
+        if running_in_colab():
+            st.caption("Colab: upload in this sidebar, use files.upload() to /content, or mount Drive.")
+
+        if source_path:
+            st.caption(str(source_path))
+
+    if source_path is None:
+        st.info("Upload an Excel workbook in the sidebar or enter a workbook path to begin.")
+        st.stop()
 
     if not source_path.exists():
         st.error(f"Excel file not found: {source_path}")
