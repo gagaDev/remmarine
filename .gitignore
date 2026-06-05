@@ -1,0 +1,15 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env
+.env.*
+*.log
+
+# Local backup/export copies kept outside the deployable app.
+-app.py
+app - *.py
+app 2026*.py
+app_updated.py
+app_with_bnm_cnm_mapping.py
+remittance_dashboard_fixed.py

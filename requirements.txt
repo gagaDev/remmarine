@@ -1,0 +1,6 @@
+streamlit>=1.35
+polars[excel]>=0.20.31
+pyarrow>=15.0
+duckdb>=0.10.3
+plotly>=5.22
+fastexcel>=0.10
